@@ -1,3 +1,6 @@
+#[cfg(feature = "mach_dxc")]
+mod mach_dxc;
+
 fn main() {
     cfg_aliases::cfg_aliases! {
         native: { not(target_arch = "wasm32") },
@@ -12,4 +15,6 @@ fn main() {
         metal: { all(any(target_os = "ios", target_os = "macos"), feature = "metal") },
         vulkan: { all(not(target_arch = "wasm32"), feature = "vulkan") }
     }
+    #[cfg(feature = "mach_dxc")]
+    mach_dxc::bundle_mach_dxc();
 }

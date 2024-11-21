@@ -37,3 +37,6 @@ cts/
 
 # Temporary clone location for wasm-bindgen mirroring
 wgpu/src/backend/webgpu/webgpu_sys/wasm_bindgen_clone_tmp
+
+# Mach dxcompiler bindings
+wgpu-hal/src/dx12/mach_dxc/bindings.rs

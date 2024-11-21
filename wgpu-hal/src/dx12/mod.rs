@@ -33,6 +33,9 @@ Otherwise, we pass a range corresponding only to the current bind group.
 
 !*/
 
+#[cfg(feature = "mach_dxc")]
+mod mach_dxc;
+
 mod adapter;
 mod command;
 mod conv;

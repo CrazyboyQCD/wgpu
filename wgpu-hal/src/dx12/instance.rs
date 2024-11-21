@@ -10,7 +10,13 @@ use windows::{
 };
 
 use super::SurfaceTarget;
-use crate::{auxil, dx12::D3D12Lib};
+use crate::{
+    auxil,
+    dx12::{shader_compilation::DxcContainer, D3D12Lib},
+};
+
+#[cfg(feature = "mach_dxc")]
+use crate::dx12::shader_compilation::get_mach_dxc_container;
 
 impl Drop for super::Instance {
     fn drop(&mut self) {
@@ -88,10 +94,18 @@ impl crate::Instance for super::Instance {
                 container.map(Arc::new)
             }
             wgt::Dx12Compiler::Fxc => None,
+            #[cfg(feature = "mach_dxc")]
+            wgt::Dx12Compiler::MachDxc => Some(Arc::new(get_mach_dxc_container())),
         };
 
         match dxc_container {
-            Some(_) => log::debug!("Using DXC for shader compilation"),
+            Some(ref dxc) => match dxc.as_ref() {
+                &DxcContainer::Dll { .. } => log::debug!("Using DXC for shader compilation"),
+                #[cfg(feature = "mach_dxc")]
+                &DxcContainer::MachBundled { .. } => {
+                    log::debug!("Using Mach DXC for shader compilation")
+                }
+            },
             None => log::debug!("Using FXC for shader compilation"),
         }
 

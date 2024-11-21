@@ -78,7 +78,7 @@ pub(super) fn compile_fxc(
     }
 }
 
-trait DxcObj: Interface {
+pub(super) trait DxcObj: Interface {
     const CLSID: windows::core::GUID;
 }
 impl DxcObj for Dxc::IDxcCompiler3 {
@@ -92,7 +92,7 @@ impl DxcObj for Dxc::IDxcValidator {
 }
 
 #[derive(Debug)]
-struct DxcLib {
+pub(super) struct DxcLib {
     lib: crate::dx12::DynLib,
 }
 
@@ -127,14 +127,36 @@ impl DxcLib {
 }
 
 // Destructor order should be fine since _dxil and _dxc don't rely on each other.
-pub(super) struct DxcContainer {
-    compiler: Dxc::IDxcCompiler3,
-    utils: Dxc::IDxcUtils,
-    validator: Dxc::IDxcValidator,
-    // Has to be held onto for the lifetime of the device otherwise shaders will fail to compile.
-    _dxc: DxcLib,
-    // Also Has to be held onto for the lifetime of the device otherwise shaders will fail to validate.
-    _dxil: DxcLib,
+pub(super) enum DxcContainer {
+    Dll {
+        compiler: Dxc::IDxcCompiler3,
+        utils: Dxc::IDxcUtils,
+        validator: Dxc::IDxcValidator,
+        // Has to be held onto for the lifetime of the device otherwise shaders will fail to compile.
+        _dxc: DxcLib,
+        // Also Has to be held onto for the lifetime of the device otherwise shaders will fail to validate.
+        _dxil: DxcLib,
+    },
+    #[cfg(feature = "mach_dxc")]
+    MachBundled { compiler: Dxc::IDxcCompiler3 },
+}
+#[cfg(feature = "mach_dxc")]
+pub(super) fn get_mach_dxc_container() -> DxcContainer {
+    use super::mach_dxc::machDxcInit;
+
+    DxcContainer::MachBundled {
+        compiler: unsafe { machDxcInit().cast::<Dxc::IDxcCompiler3>().read() },
+    }
+}
+
+impl DxcContainer {
+    fn compiler(&self) -> &Dxc::IDxcCompiler3 {
+        match self {
+            DxcContainer::Dll { compiler, .. } => compiler,
+            #[cfg(feature = "mach_dxc")]
+            DxcContainer::MachBundled { compiler } => compiler,
+        }
+    }
 }
 
 pub(super) fn get_dxc_container(
@@ -169,7 +191,7 @@ pub(super) fn get_dxc_container(
     let utils = dxc.create_instance::<Dxc::IDxcUtils>()?;
     let validator = dxil.create_instance::<Dxc::IDxcValidator>()?;
 
-    Ok(Some(DxcContainer {
+    Ok(Some(DxcContainer::Dll {
         compiler,
         utils,
         validator,
@@ -265,7 +287,7 @@ pub(super) fn compile_dxc(
 
     let compile_res: Dxc::IDxcResult = unsafe {
         dxc_container
-            .compiler
+            .compiler()
             .Compile(&buffer, Some(&compile_args), None)
     }
     .into_device_result("Compile")?;
@@ -288,26 +310,25 @@ pub(super) fn compile_dxc(
 
     let blob = get_output::<Dxc::IDxcBlob>(&compile_res, Dxc::DXC_OUT_OBJECT)?;
 
-    let err_blob = {
-        let res = unsafe {
-            dxc_container
-                .validator
-                .Validate(&blob, Dxc::DxcValidatorFlags_InPlaceEdit)
+    #[allow(irrefutable_let_patterns)]
+    if let DxcContainer::Dll {
+        validator, utils, ..
+    } = dxc_container
+    {
+        let res = unsafe { validator.Validate(&blob, Dxc::DxcValidatorFlags_InPlaceEdit) }
+            .into_device_result("Validate")?;
+
+        let err_blob = unsafe { res.GetErrorBuffer() }.into_device_result("GetErrorBuffer")?;
+        let size = unsafe { err_blob.GetBufferSize() };
+        if size != 0 {
+            let err_blob =
+                unsafe { utils.GetBlobAsUtf8(&err_blob) }.into_device_result("GetBlobAsUtf8")?;
+            let err = as_err_str(&err_blob)?;
+            return Err(crate::PipelineError::Linkage(
+                stage_bit,
+                format!("DXC validation error: {err}"),
+            ));
         }
-        .into_device_result("Validate")?;
-
-        unsafe { res.GetErrorBuffer() }.into_device_result("GetErrorBuffer")?
-    };
-
-    let size = unsafe { err_blob.GetBufferSize() };
-    if size != 0 {
-        let err_blob = unsafe { dxc_container.utils.GetBlobAsUtf8(&err_blob) }
-            .into_device_result("GetBlobAsUtf8")?;
-        let err = as_err_str(&err_blob)?;
-        return Err(crate::PipelineError::Linkage(
-            stage_bit,
-            format!("DXC validation error: {err}"),
-        ));
     }
 
     Ok(crate::dx12::CompiledShader::Dxc(blob))

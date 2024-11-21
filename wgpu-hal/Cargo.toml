@@ -91,6 +91,10 @@ dx12 = [
     "windows/Win32_System_Threading",
     "windows/Win32_UI_WindowsAndMessaging",
 ]
+
+## Enable experimental mach dxcompiler.
+mach_dxc = ["dep:cached-path", "dep:bindgen"]
+
 renderdoc = ["dep:libloading", "dep:renderdoc-sys"]
 fragile-send-sync-non-atomic-wasm = ["wgt/fragile-send-sync-non-atomic-wasm"]
 # Panic when running into an out-of-memory error (for debugging purposes).
@@ -195,6 +199,8 @@ version = "23.0.0"
 
 [build-dependencies]
 cfg_aliases.workspace = true
+bindgen = { version = "0.69.5", optional = true }
+cached-path = { version = "0.6.1", optional = true }
 
 # DEV dependencies
 [dev-dependencies.naga]

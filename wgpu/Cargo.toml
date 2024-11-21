@@ -40,6 +40,9 @@ default = ["wgsl", "dx12", "metal", "webgpu"]
 ## Enables the DX12 backend on Windows.
 dx12 = ["wgc?/dx12"]
 
+## Enable experimental mach dxcompiler.
+mach_dxc = ["wgc?/mach_dxc", "wgt/mach_dxc"]
+
 ## Enables the Metal backend on macOS & iOS.
 metal = ["wgc?/metal"]
 

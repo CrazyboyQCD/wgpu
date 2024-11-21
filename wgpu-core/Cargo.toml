@@ -109,6 +109,9 @@ gles = ["hal/gles"]
 ## Enable the `dx12` backend.
 dx12 = ["hal/dx12"]
 
+## Enable experimental mach dxcompiler.
+mach_dxc = ["hal/mach_dxc"]
+
 [dependencies]
 arrayvec.workspace = true
 bit-vec.workspace = true

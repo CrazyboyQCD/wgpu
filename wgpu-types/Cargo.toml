@@ -34,6 +34,9 @@ serde = ["dep:serde"]
 # Enables some internal instrumentation for debugging purposes.
 counters = []
 
+## Enable experimental mach dxcompiler.
+mach_dxc = []
+
 [dependencies]
 bitflags.workspace = true
 serde = { workspace = true, features = ["derive"], optional = true }

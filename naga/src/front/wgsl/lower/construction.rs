@@ -93,7 +93,7 @@ impl Components<'_> {
     }
 }
 
-impl<'source> Lowerer<'source, '_> {
+impl<'alloc, 'source: 'alloc> Lowerer<'alloc, 'source, '_> {
     /// Generate Naga IR for a type constructor expression.
     ///
     /// The `constructor` value represents the head of the constructor
@@ -110,10 +110,10 @@ impl<'source> Lowerer<'source, '_> {
     pub fn construct(
         &mut self,
         span: Span,
-        constructor: &ast::ConstructorType<'source>,
+        constructor: &ast::ConstructorType<'alloc, 'source>,
         ty_span: Span,
-        components: &[Handle<ast::Expression<'source>>],
-        ctx: &mut ExpressionContext<'source, '_, '_>,
+        components: &[Handle<ast::Expression<'alloc, 'source>>],
+        ctx: &mut ExpressionContext<'alloc, 'source, '_, '_>,
     ) -> Result<Handle<crate::Expression>, Error<'source>> {
         use crate::proc::TypeResolution as Tr;
 
@@ -569,8 +569,8 @@ impl<'source> Lowerer<'source, '_> {
     /// [`ctx.module`]: ExpressionContext::module
     fn constructor<'out>(
         &mut self,
-        constructor: &ast::ConstructorType<'source>,
-        ctx: &mut ExpressionContext<'source, '_, 'out>,
+        constructor: &ast::ConstructorType<'alloc, 'source>,
+        ctx: &mut ExpressionContext<'alloc, 'source, '_, 'out>,
     ) -> Result<Constructor<Handle<crate::Type>>, Error<'source>> {
         let handle = match *constructor {
             ast::ConstructorType::Scalar(scalar) => {

@@ -3,11 +3,11 @@ use crate::front::wgsl::parse::ast;
 use crate::{FastHashMap, Handle, Span};
 
 /// A `GlobalDecl` list in which each definition occurs before all its uses.
-pub struct Index<'a> {
-    dependency_order: Vec<Handle<ast::GlobalDecl<'a>>>,
+pub struct Index<'alloc, 'a: 'alloc> {
+    dependency_order: Vec<Handle<ast::GlobalDecl<'alloc, 'a>>>,
 }
 
-impl<'a> Index<'a> {
+impl<'alloc, 'a: 'alloc> Index<'alloc, 'a> {
     /// Generate an `Index` for the given translation unit.
     ///
     /// Perform a topological sort on `tu`'s global declarations, placing
@@ -15,7 +15,7 @@ impl<'a> Index<'a> {
     ///
     /// Return an error if the graph of references between declarations contains
     /// any cycles.
-    pub fn generate(tu: &ast::TranslationUnit<'a>) -> Result<Self, Error<'a>> {
+    pub fn generate(tu: &ast::TranslationUnit<'alloc, 'a>) -> Result<Self, Error<'a>> {
         // Produce a map from global definitions' names to their `Handle<GlobalDecl>`s.
         // While doing so, reject conflicting definitions.
         let mut globals = FastHashMap::with_capacity_and_hasher(tu.decls.len(), Default::default());
@@ -52,7 +52,7 @@ impl<'a> Index<'a> {
     /// Produce handles for all of the `GlobalDecl`s of the `TranslationUnit`
     /// passed to `Index::generate`, ordered so that a given declaration is
     /// produced before any other declaration that uses it.
-    pub fn visit_ordered(&self) -> impl Iterator<Item = Handle<ast::GlobalDecl<'a>>> + '_ {
+    pub fn visit_ordered(&self) -> impl Iterator<Item = Handle<ast::GlobalDecl<'alloc, 'a>>> + '_ {
         self.dependency_order.iter().copied()
     }
 }
@@ -62,9 +62,9 @@ impl<'a> Index<'a> {
 ///
 /// This is like `ast::Dependency`, except that we've determined which
 /// `GlobalDecl` it refers to.
-struct ResolvedDependency<'a> {
+struct ResolvedDependency<'alloc, 'a: 'alloc> {
     /// The referent of some identifier used in the current declaration.
-    decl: Handle<ast::GlobalDecl<'a>>,
+    decl: Handle<ast::GlobalDecl<'alloc, 'a>>,
 
     /// Where that use occurs within the current declaration.
     usage: Span,
@@ -77,12 +77,12 @@ struct ResolvedDependency<'a> {
 /// Technically, what we want is a topological sort, but a depth-first sort
 /// has one key benefit - it's much more efficient in storing
 /// the path of each node for error generation.
-struct DependencySolver<'source, 'temp> {
+struct DependencySolver<'alloc, 'source: 'alloc, 'temp> {
     /// A map from module-scope definitions' names to their handles.
-    globals: &'temp FastHashMap<&'source str, Handle<ast::GlobalDecl<'source>>>,
+    globals: &'temp FastHashMap<&'source str, Handle<ast::GlobalDecl<'alloc, 'source>>>,
 
     /// The translation unit whose declarations we're ordering.
-    module: &'temp ast::TranslationUnit<'source>,
+    module: &'temp ast::TranslationUnit<'alloc,'source>,
 
     /// For each handle, whether we have pushed it onto `out` yet.
     visited: Vec<bool>,
@@ -93,15 +93,15 @@ struct DependencySolver<'source, 'temp> {
 
     /// The current path in our depth-first traversal. Used for generating
     /// error messages for non-trivial reference cycles.
-    path: Vec<ResolvedDependency<'source>>,
+    path: Vec<ResolvedDependency<'alloc, 'source>>,
 
     /// The list of declaration handles, with declarations before uses.
-    out: Vec<Handle<ast::GlobalDecl<'source>>>,
+    out: Vec<Handle<ast::GlobalDecl<'alloc, 'source>>>,
 }
 
-impl<'a> DependencySolver<'a, '_> {
+impl<'alloc, 'a: 'alloc> DependencySolver<'alloc, 'a, '_> {
     /// Produce the sorted list of declaration handles, and check for cycles.
-    fn solve(mut self) -> Result<Vec<Handle<ast::GlobalDecl<'a>>>, Error<'a>> {
+    fn solve(mut self) -> Result<Vec<Handle<ast::GlobalDecl<'alloc, 'a>>>, Error<'a>> {
         for (id, _) in self.module.decls.iter() {
             if self.visited[id.index()] {
                 continue;
@@ -115,7 +115,7 @@ impl<'a> DependencySolver<'a, '_> {
 
     /// Ensure that all declarations used by `id` have been added to the
     /// ordering, and then append `id` itself.
-    fn dfs(&mut self, id: Handle<ast::GlobalDecl<'a>>) -> Result<(), Error<'a>> {
+    fn dfs(&mut self, id: Handle<ast::GlobalDecl<'alloc, 'a>>) -> Result<(), Error<'a>> {
         let decl = &self.module.decls[id];
         let id_usize = id.index();
 
@@ -190,7 +190,9 @@ impl<'a> DependencySolver<'a, '_> {
     }
 }
 
-const fn decl_ident<'a>(decl: &ast::GlobalDecl<'a>) -> Option<ast::Ident<'a>> {
+const fn decl_ident<'alloc, 'a: 'alloc>(
+    decl: &ast::GlobalDecl<'alloc, 'a>,
+) -> Option<ast::Ident<'a>> {
     match decl.kind {
         ast::GlobalDeclKind::Fn(ref f) => Some(f.name),
         ast::GlobalDeclKind::Var(ref v) => Some(v.name),

@@ -1,3 +1,5 @@
+use crate::alloc::{allocator, Allocator};
+
 use super::parse_str;
 
 #[test]
@@ -644,7 +646,7 @@ fn parse_repeated_attributes() {
         let span_end = span_start + name_length;
         let expected_span = Span::new(span_start, span_end);
 
-        let result = Frontend::new().inner(&shader);
+        let result = Frontend::new(&allocator::Allocator::default()).inner(&shader);
         assert!(matches!(
             result.unwrap_err(),
             Error::RepeatedAttribute(span) if span == expected_span
@@ -660,7 +662,7 @@ fn parse_missing_workgroup_size() {
     };
 
     let shader = "@compute fn vs() -> vec4<f32> { return vec4<f32>(0.0); }";
-    let result = Frontend::new().inner(shader);
+    let result = Frontend::new(&Allocator::default()).inner(shader);
     assert!(matches!(
         result.unwrap_err(),
         Error::MissingWorkgroupSize(span) if span == Span::new(1, 8)

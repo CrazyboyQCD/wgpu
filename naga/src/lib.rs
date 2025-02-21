@@ -250,6 +250,8 @@ An override expression can be evaluated at pipeline creation time.
     )
 )]
 
+pub(crate) mod alloc;
+
 mod arena;
 pub mod back;
 mod block;

@@ -70,12 +70,12 @@ macro_rules! resolve {
 pub(super) use resolve;
 
 /// State for constructing a `crate::Module`.
-pub struct GlobalContext<'source, 'temp, 'out> {
+pub struct GlobalContext<'alloc, 'source: 'alloc, 'temp, 'out> {
     /// The `TranslationUnit`'s expressions arena.
-    ast_expressions: &'temp Arena<ast::Expression<'source>>,
+    ast_expressions: &'temp Arena<ast::Expression<'alloc, 'source>>,
 
     /// The `TranslationUnit`'s types arena.
-    types: &'temp Arena<ast::Type<'source>>,
+    types: &'temp Arena<ast::Type<'alloc, 'source>>,
 
     // Naga IR values.
     /// The map from the names of module-scope declarations to the Naga IR
@@ -92,8 +92,8 @@ pub struct GlobalContext<'source, 'temp, 'out> {
     global_expression_kind_tracker: &'temp mut crate::proc::ExpressionKindTracker,
 }
 
-impl<'source> GlobalContext<'source, '_, '_> {
-    fn as_const(&mut self) -> ExpressionContext<'source, '_, '_> {
+impl<'alloc, 'source: 'alloc> GlobalContext<'alloc, 'source, '_, '_> {
+    fn as_const(&mut self) -> ExpressionContext<'alloc, 'source, '_, '_> {
         ExpressionContext {
             ast_expressions: self.ast_expressions,
             globals: self.globals,
@@ -106,7 +106,7 @@ impl<'source> GlobalContext<'source, '_, '_> {
         }
     }
 
-    fn as_override(&mut self) -> ExpressionContext<'source, '_, '_> {
+    fn as_override(&mut self) -> ExpressionContext<'alloc, 'source, '_, '_> {
         ExpressionContext {
             ast_expressions: self.ast_expressions,
             globals: self.globals,
@@ -131,19 +131,19 @@ impl<'source> GlobalContext<'source, '_, '_> {
 }
 
 /// State for lowering a statement within a function.
-pub struct StatementContext<'source, 'temp, 'out> {
+pub struct StatementContext<'alloc, 'source: 'alloc, 'temp, 'out> {
     // WGSL AST values.
     /// A reference to [`TranslationUnit::expressions`] for the translation unit
     /// we're lowering.
     ///
     /// [`TranslationUnit::expressions`]: ast::TranslationUnit::expressions
-    ast_expressions: &'temp Arena<ast::Expression<'source>>,
+    ast_expressions: &'temp Arena<ast::Expression<'alloc, 'source>>,
 
     /// A reference to [`TranslationUnit::types`] for the translation unit
     /// we're lowering.
     ///
     /// [`TranslationUnit::types`]: ast::TranslationUnit::types
-    types: &'temp Arena<ast::Type<'source>>,
+    types: &'temp Arena<ast::Type<'alloc, 'source>>,
 
     // Naga IR values.
     /// The map from the names of module-scope declarations to the Naga IR
@@ -189,12 +189,12 @@ pub struct StatementContext<'source, 'temp, 'out> {
     global_expression_kind_tracker: &'temp mut crate::proc::ExpressionKindTracker,
 }
 
-impl<'a, 'temp> StatementContext<'a, 'temp, '_> {
+impl<'alloc, 'a: 'alloc, 'temp> StatementContext<'alloc, 'a, 'temp, '_> {
     fn as_const<'t>(
         &'t mut self,
         block: &'t mut crate::Block,
         emitter: &'t mut Emitter,
-    ) -> ExpressionContext<'a, 't, 't>
+    ) -> ExpressionContext<'alloc, 'a, 't, 't>
     where
         'temp: 't,
     {
@@ -221,7 +221,7 @@ impl<'a, 'temp> StatementContext<'a, 'temp, '_> {
         &'t mut self,
         block: &'t mut crate::Block,
         emitter: &'t mut Emitter,
-    ) -> ExpressionContext<'a, 't, 't>
+    ) -> ExpressionContext<'alloc, 'a, 't, 't>
     where
         'temp: 't,
     {
@@ -244,7 +244,7 @@ impl<'a, 'temp> StatementContext<'a, 'temp, '_> {
         }
     }
 
-    fn as_global(&mut self) -> GlobalContext<'a, '_, '_> {
+    fn as_global(&mut self) -> GlobalContext<'alloc, 'a, '_, '_> {
         GlobalContext {
             ast_expressions: self.ast_expressions,
             globals: self.globals,
@@ -353,10 +353,10 @@ pub enum ExpressionContextType<'temp, 'out> {
 /// [`naga::Module`]: crate::Module
 /// [`as_const`]: ExpressionContext::as_const
 /// [`Expression::Constant`]: crate::Expression::Constant
-pub struct ExpressionContext<'source, 'temp, 'out> {
+pub struct ExpressionContext<'alloc, 'source: 'alloc, 'temp, 'out> {
     // WGSL AST values.
-    ast_expressions: &'temp Arena<ast::Expression<'source>>,
-    types: &'temp Arena<ast::Type<'source>>,
+    ast_expressions: &'temp Arena<ast::Expression<'alloc, 'source>>,
+    types: &'temp Arena<ast::Type<'alloc, 'source>>,
 
     // Naga IR values.
     /// The map from the names of module-scope declarations to the Naga IR
@@ -380,9 +380,9 @@ pub struct ExpressionContext<'source, 'temp, 'out> {
     expr_type: ExpressionContextType<'temp, 'out>,
 }
 
-impl<'source, 'temp, 'out> ExpressionContext<'source, 'temp, 'out> {
+impl<'alloc, 'source: 'alloc, 'temp, 'out> ExpressionContext<'alloc, 'source, 'temp, 'out> {
     #[allow(dead_code)]
-    fn as_const(&mut self) -> ExpressionContext<'source, '_, '_> {
+    fn as_const(&mut self) -> ExpressionContext<'alloc, 'source, '_, '_> {
         ExpressionContext {
             globals: self.globals,
             types: self.types,
@@ -409,7 +409,7 @@ impl<'source, 'temp, 'out> ExpressionContext<'source, 'temp, 'out> {
         }
     }
 
-    fn as_global(&mut self) -> GlobalContext<'source, '_, '_> {
+    fn as_global(&mut self) -> GlobalContext<'alloc, 'source, '_, '_> {
         GlobalContext {
             ast_expressions: self.ast_expressions,
             globals: self.globals,
@@ -674,10 +674,10 @@ impl<'source, 'temp, 'out> ExpressionContext<'source, 'temp, 'out> {
 
     fn prepare_args<'b>(
         &mut self,
-        args: &'b [Handle<ast::Expression<'source>>],
+        args: &'b [Handle<ast::Expression<'alloc, 'source>>],
         min_args: u32,
         span: Span,
-    ) -> ArgumentContext<'b, 'source> {
+    ) -> ArgumentContext<'alloc, 'b, 'source> {
         ArgumentContext {
             args: args.iter(),
             min_args,
@@ -781,15 +781,15 @@ impl<'source, 'temp, 'out> ExpressionContext<'source, 'temp, 'out> {
     }
 }
 
-struct ArgumentContext<'ctx, 'source> {
-    args: std::slice::Iter<'ctx, Handle<ast::Expression<'source>>>,
+struct ArgumentContext<'alloc, 'ctx, 'source: 'alloc> {
+    args: std::slice::Iter<'ctx, Handle<ast::Expression<'alloc, 'source>>>,
     min_args: u32,
     args_used: u32,
     total_args: u32,
     span: Span,
 }
 
-impl<'source> ArgumentContext<'_, 'source> {
+impl<'alloc, 'source: 'alloc> ArgumentContext<'alloc, '_, 'source> {
     pub fn finish(self) -> Result<(), Error<'source>> {
         if self.args.len() == 0 {
             Ok(())
@@ -802,7 +802,7 @@ impl<'source> ArgumentContext<'_, 'source> {
         }
     }
 
-    pub fn next(&mut self) -> Result<Handle<ast::Expression<'source>>, Error<'source>> {
+    pub fn next(&mut self) -> Result<Handle<ast::Expression<'alloc, 'source>>, Error<'source>> {
         match self.args.next().copied() {
             Some(arg) => {
                 self.args_used += 1;
@@ -1029,18 +1029,18 @@ impl SubgroupGather {
     }
 }
 
-pub struct Lowerer<'source, 'temp> {
-    index: &'temp Index<'source>,
+pub struct Lowerer<'alloc, 'source: 'alloc, 'temp> {
+    index: &'temp Index<'alloc, 'source>,
 }
 
-impl<'source, 'temp> Lowerer<'source, 'temp> {
-    pub const fn new(index: &'temp Index<'source>) -> Self {
+impl<'alloc, 'source: 'alloc, 'temp> Lowerer<'alloc, 'source, 'temp> {
+    pub const fn new(index: &'temp Index<'alloc, 'source>) -> Self {
         Self { index }
     }
 
     pub fn lower(
         &mut self,
-        tu: &'temp ast::TranslationUnit<'source>,
+        tu: &'temp ast::TranslationUnit<'alloc, 'source>,
     ) -> Result<crate::Module, Error<'source>> {
         let mut module = crate::Module {
             diagnostic_filters: tu.diagnostic_filters.clone(),
@@ -1199,9 +1199,9 @@ impl<'source, 'temp> Lowerer<'source, 'temp> {
     fn type_and_init(
         &mut self,
         name: ast::Ident<'source>,
-        init: Option<Handle<ast::Expression<'source>>>,
+        init: Option<Handle<ast::Expression<'alloc, 'source>>>,
         explicit_ty: Option<Handle<crate::Type>>,
-        ectx: &mut ExpressionContext<'source, '_, '_>,
+        ectx: &mut ExpressionContext<'alloc, 'source, '_, '_>,
     ) -> Result<(Handle<crate::Type>, Option<Handle<crate::Expression>>), Error<'source>> {
         let ty;
         let initializer;
@@ -1249,9 +1249,9 @@ impl<'source, 'temp> Lowerer<'source, 'temp> {
 
     fn function(
         &mut self,
-        f: &ast::Function<'source>,
+        f: &ast::Function<'alloc, 'source>,
         span: Span,
-        ctx: &mut GlobalContext<'source, '_, '_>,
+        ctx: &mut GlobalContext<'alloc, 'source, '_, '_>,
     ) -> Result<LoweredGlobalDecl, Error<'source>> {
         let mut local_table = FastHashMap::default();
         let mut expressions = Arena::new();
@@ -1387,8 +1387,8 @@ impl<'source, 'temp> Lowerer<'source, 'temp> {
 
     fn workgroup_size_override(
         &mut self,
-        size_expr: Handle<ast::Expression<'source>>,
-        ctx: &mut ExpressionContext<'source, '_, '_>,
+        size_expr: Handle<ast::Expression<'alloc, 'source>>,
+        ctx: &mut ExpressionContext<'alloc, 'source, '_, '_>,
     ) -> Result<Handle<crate::Expression>, Error<'source>> {
         let span = ctx.ast_expressions.get_span(size_expr);
         let expr = self.expression(size_expr, ctx)?;
@@ -1400,9 +1400,9 @@ impl<'source, 'temp> Lowerer<'source, 'temp> {
 
     fn block(
         &mut self,
-        b: &ast::Block<'source>,
+        b: &ast::Block<'alloc, 'source>,
         is_inside_loop: bool,
-        ctx: &mut StatementContext<'source, '_, '_>,
+        ctx: &mut StatementContext<'alloc, 'source, '_, '_>,
     ) -> Result<crate::Block, Error<'source>> {
         let mut block = crate::Block::default();
 
@@ -1415,10 +1415,10 @@ impl<'source, 'temp> Lowerer<'source, 'temp> {
 
     fn statement(
         &mut self,
-        stmt: &ast::Statement<'source>,
+        stmt: &ast::Statement<'alloc, 'source>,
         block: &mut crate::Block,
         is_inside_loop: bool,
-        ctx: &mut StatementContext<'source, '_, '_>,
+        ctx: &mut StatementContext<'alloc, 'source, '_, '_>,
     ) -> Result<(), Error<'source>> {
         let out = match stmt.kind {
             ast::StatementKind::Block(ref block) => {
@@ -1859,8 +1859,8 @@ impl<'source, 'temp> Lowerer<'source, 'temp> {
     /// [`expression_for_abstract`]: Lowerer::expression_for_abstract
     fn expression(
         &mut self,
-        expr: Handle<ast::Expression<'source>>,
-        ctx: &mut ExpressionContext<'source, '_, '_>,
+        expr: Handle<ast::Expression<'alloc, 'source>>,
+        ctx: &mut ExpressionContext<'alloc, 'source, '_, '_>,
     ) -> Result<Handle<crate::Expression>, Error<'source>> {
         let expr = self.expression_for_abstract(expr, ctx)?;
         ctx.concretize(expr)
@@ -1868,8 +1868,8 @@ impl<'source, 'temp> Lowerer<'source, 'temp> {
 
     fn expression_for_abstract(
         &mut self,
-        expr: Handle<ast::Expression<'source>>,
-        ctx: &mut ExpressionContext<'source, '_, '_>,
+        expr: Handle<ast::Expression<'alloc, 'source>>,
+        ctx: &mut ExpressionContext<'alloc, 'source, '_, '_>,
     ) -> Result<Handle<crate::Expression>, Error<'source>> {
         let expr = self.expression_for_reference(expr, ctx)?;
         ctx.apply_load_rule(expr)
@@ -1877,8 +1877,8 @@ impl<'source, 'temp> Lowerer<'source, 'temp> {
 
     fn expression_for_reference(
         &mut self,
-        expr: Handle<ast::Expression<'source>>,
-        ctx: &mut ExpressionContext<'source, '_, '_>,
+        expr: Handle<ast::Expression<'alloc, 'source>>,
+        ctx: &mut ExpressionContext<'alloc, 'source, '_, '_>,
     ) -> Result<Typed<Handle<crate::Expression>>, Error<'source>> {
         let span = ctx.ast_expressions.get_span(expr);
         let expr = &ctx.ast_expressions[expr];
@@ -2099,10 +2099,10 @@ impl<'source, 'temp> Lowerer<'source, 'temp> {
     fn binary(
         &mut self,
         op: crate::BinaryOperator,
-        left: Handle<ast::Expression<'source>>,
-        right: Handle<ast::Expression<'source>>,
+        left: Handle<ast::Expression<'alloc, 'source>>,
+        right: Handle<ast::Expression<'alloc, 'source>>,
         span: Span,
-        ctx: &mut ExpressionContext<'source, '_, '_>,
+        ctx: &mut ExpressionContext<'alloc, 'source, '_, '_>,
     ) -> Result<Typed<crate::Expression>, Error<'source>> {
         // Load both operands.
         let mut left = self.expression_for_abstract(left, ctx)?;
@@ -2164,8 +2164,8 @@ impl<'source, 'temp> Lowerer<'source, 'temp> {
         &mut self,
         span: Span,
         function: &ast::Ident<'source>,
-        arguments: &[Handle<ast::Expression<'source>>],
-        ctx: &mut ExpressionContext<'source, '_, '_>,
+        arguments: &[Handle<ast::Expression<'alloc, 'source>>],
+        ctx: &mut ExpressionContext<'alloc, 'source, '_, '_>,
         is_statement: bool,
     ) -> Result<Option<Handle<crate::Expression>>, Error<'source>> {
         let function_span = function.span;
@@ -2770,8 +2770,8 @@ impl<'source, 'temp> Lowerer<'source, 'temp> {
 
     fn atomic_pointer(
         &mut self,
-        expr: Handle<ast::Expression<'source>>,
-        ctx: &mut ExpressionContext<'source, '_, '_>,
+        expr: Handle<ast::Expression<'alloc, 'source>>,
+        ctx: &mut ExpressionContext<'alloc, 'source, '_, '_>,
     ) -> Result<Handle<crate::Expression>, Error<'source>> {
         let span = ctx.ast_expressions.get_span(expr);
         let pointer = self.expression(expr, ctx)?;
@@ -2795,9 +2795,9 @@ impl<'source, 'temp> Lowerer<'source, 'temp> {
         &mut self,
         span: Span,
         fun: crate::AtomicFunction,
-        args: &[Handle<ast::Expression<'source>>],
+        args: &[Handle<ast::Expression<'alloc, 'source>>],
         is_statement: bool,
-        ctx: &mut ExpressionContext<'source, '_, '_>,
+        ctx: &mut ExpressionContext<'alloc, 'source, '_, '_>,
     ) -> Result<Option<Handle<crate::Expression>>, Error<'source>> {
         let mut args = ctx.prepare_args(args, 2, span);
 
@@ -2848,16 +2848,16 @@ impl<'source, 'temp> Lowerer<'source, 'temp> {
     fn texture_sample_helper(
         &mut self,
         fun: Texture,
-        args: &[Handle<ast::Expression<'source>>],
+        args: &[Handle<ast::Expression<'alloc, 'source>>],
         span: Span,
-        ctx: &mut ExpressionContext<'source, '_, '_>,
+        ctx: &mut ExpressionContext<'alloc, 'source, '_, '_>,
     ) -> Result<crate::Expression, Error<'source>> {
         let mut args = ctx.prepare_args(args, fun.min_argument_count(), span);
 
-        fn get_image_and_span<'source>(
-            lowerer: &mut Lowerer<'source, '_>,
-            args: &mut ArgumentContext<'_, 'source>,
-            ctx: &mut ExpressionContext<'source, '_, '_>,
+        fn get_image_and_span<'alloc, 'source: 'alloc>(
+            lowerer: &mut Lowerer<'alloc, 'source, '_>,
+            args: &mut ArgumentContext<'alloc, '_, 'source>,
+            ctx: &mut ExpressionContext<'alloc, 'source, '_, '_>,
         ) -> Result<(Handle<crate::Expression>, Span), Error<'source>> {
             let image = args.next()?;
             let image_span = ctx.ast_expressions.get_span(image);
@@ -2971,8 +2971,8 @@ impl<'source, 'temp> Lowerer<'source, 'temp> {
         span: Span,
         op: crate::SubgroupOperation,
         collective_op: crate::CollectiveOperation,
-        arguments: &[Handle<ast::Expression<'source>>],
-        ctx: &mut ExpressionContext<'source, '_, '_>,
+        arguments: &[Handle<ast::Expression<'alloc, 'source>>],
+        ctx: &mut ExpressionContext<'alloc, 'source, '_, '_>,
     ) -> Result<Handle<crate::Expression>, Error<'source>> {
         let mut args = ctx.prepare_args(arguments, 1, span);
 
@@ -3000,8 +3000,8 @@ impl<'source, 'temp> Lowerer<'source, 'temp> {
         &mut self,
         span: Span,
         mode: SubgroupGather,
-        arguments: &[Handle<ast::Expression<'source>>],
-        ctx: &mut ExpressionContext<'source, '_, '_>,
+        arguments: &[Handle<ast::Expression<'alloc, 'source>>],
+        ctx: &mut ExpressionContext<'alloc, 'source, '_, '_>,
     ) -> Result<Handle<crate::Expression>, Error<'source>> {
         let mut args = ctx.prepare_args(arguments, 2, span);
 
@@ -3042,9 +3042,9 @@ impl<'source, 'temp> Lowerer<'source, 'temp> {
 
     fn r#struct(
         &mut self,
-        s: &ast::Struct<'source>,
+        s: &ast::Struct<'alloc, 'source>,
         span: Span,
-        ctx: &mut GlobalContext<'source, '_, '_>,
+        ctx: &mut GlobalContext<'alloc, 'source, '_, '_>,
     ) -> Result<Handle<crate::Type>, Error<'source>> {
         let mut offset = 0;
         let mut struct_alignment = Alignment::ONE;
@@ -3117,8 +3117,8 @@ impl<'source, 'temp> Lowerer<'source, 'temp> {
 
     fn const_u32(
         &mut self,
-        expr: Handle<ast::Expression<'source>>,
-        ctx: &mut ExpressionContext<'source, '_, '_>,
+        expr: Handle<ast::Expression<'alloc, 'source>>,
+        ctx: &mut ExpressionContext<'alloc, 'source, '_, '_>,
     ) -> Result<(u32, Span), Error<'source>> {
         let span = ctx.ast_expressions.get_span(expr);
         let expr = self.expression(expr, ctx)?;
@@ -3137,8 +3137,8 @@ impl<'source, 'temp> Lowerer<'source, 'temp> {
 
     fn array_size(
         &mut self,
-        size: ast::ArraySize<'source>,
-        ctx: &mut GlobalContext<'source, '_, '_>,
+        size: ast::ArraySize<'alloc, 'source>,
+        ctx: &mut GlobalContext<'alloc, 'source, '_, '_>,
     ) -> Result<crate::ArraySize, Error<'source>> {
         Ok(match size {
             ast::ArraySize::Constant(expr) => {
@@ -3189,8 +3189,8 @@ impl<'source, 'temp> Lowerer<'source, 'temp> {
 
     fn array_size_override(
         &mut self,
-        size_expr: Handle<ast::Expression<'source>>,
-        ctx: &mut ExpressionContext<'source, '_, '_>,
+        size_expr: Handle<ast::Expression<'alloc, 'source>>,
+        ctx: &mut ExpressionContext<'alloc, 'source, '_, '_>,
         span: Span,
     ) -> Result<crate::PendingArraySize, Error<'source>> {
         let expr = self.expression(size_expr, ctx)?;
@@ -3217,9 +3217,9 @@ impl<'source, 'temp> Lowerer<'source, 'temp> {
     /// [`SpecialTypes`]: crate::SpecialTypes
     fn resolve_named_ast_type(
         &mut self,
-        handle: Handle<ast::Type<'source>>,
+        handle: Handle<ast::Type<'alloc, 'source>>,
         name: Option<String>,
-        ctx: &mut GlobalContext<'source, '_, '_>,
+        ctx: &mut GlobalContext<'alloc, 'source, '_, '_>,
     ) -> Result<Handle<crate::Type>, Error<'source>> {
         let inner = match ctx.types[handle] {
             ast::Type::Scalar(scalar) => scalar.to_inner_scalar(),
@@ -3303,17 +3303,17 @@ impl<'source, 'temp> Lowerer<'source, 'temp> {
     /// Return a Naga `Handle<Type>` representing the front-end type `handle`.
     fn resolve_ast_type(
         &mut self,
-        handle: Handle<ast::Type<'source>>,
-        ctx: &mut GlobalContext<'source, '_, '_>,
+        handle: Handle<ast::Type<'alloc, 'source>>,
+        ctx: &mut GlobalContext<'alloc, 'source, '_, '_>,
     ) -> Result<Handle<crate::Type>, Error<'source>> {
         self.resolve_named_ast_type(handle, None, ctx)
     }
 
     fn binding(
         &mut self,
-        binding: &Option<ast::Binding<'source>>,
+        binding: &Option<ast::Binding<'alloc, 'source>>,
         ty: Handle<crate::Type>,
-        ctx: &mut GlobalContext<'source, '_, '_>,
+        ctx: &mut GlobalContext<'alloc, 'source, '_, '_>,
     ) -> Result<Option<crate::Binding>, Error<'source>> {
         Ok(match *binding {
             Some(ast::Binding::BuiltIn(b)) => Some(crate::Binding::BuiltIn(b)),
@@ -3338,8 +3338,8 @@ impl<'source, 'temp> Lowerer<'source, 'temp> {
 
     fn ray_query_pointer(
         &mut self,
-        expr: Handle<ast::Expression<'source>>,
-        ctx: &mut ExpressionContext<'source, '_, '_>,
+        expr: Handle<ast::Expression<'alloc, 'source>>,
+        ctx: &mut ExpressionContext<'alloc, 'source, '_, '_>,
     ) -> Result<Handle<crate::Expression>, Error<'source>> {
         let span = ctx.ast_expressions.get_span(expr);
         let pointer = self.expression(expr, ctx)?;

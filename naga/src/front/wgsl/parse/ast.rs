@@ -1,14 +1,14 @@
+use crate::alloc::Vec;
 use crate::diagnostic_filter::DiagnosticFilterNode;
 use crate::front::wgsl::parse::directive::enable_extension::EnableExtensions;
 use crate::front::wgsl::parse::number::Number;
 use crate::front::wgsl::Scalar;
 use crate::{Arena, FastIndexSet, Handle, Span};
 use std::hash::Hash;
-
 #[derive(Debug, Default)]
-pub struct TranslationUnit<'a> {
+pub struct TranslationUnit<'alloc, 'a: 'alloc> {
     pub enable_extensions: EnableExtensions,
-    pub decls: Arena<GlobalDecl<'a>>,
+    pub decls: Arena<GlobalDecl<'alloc, 'a>>,
     /// The common expressions arena for the entire translation unit.
     ///
     /// All functions, global initializers, array lengths, etc. store their
@@ -20,13 +20,13 @@ pub struct TranslationUnit<'a> {
     /// contexts).
     ///
     /// [`Function`]: crate::Function
-    pub expressions: Arena<Expression<'a>>,
+    pub expressions: Arena<Expression<'alloc, 'a>>,
 
     /// Non-user-defined types, like `vec4<f32>` or `array<i32, 10>`.
     ///
-    /// These are referred to by `Handle<ast::Type<'a>>` values.
+    /// These are referred to by `Handle<ast::Type<'alloc,'a>>` values.
     /// User-defined types are referred to by name until lowering.
-    pub types: Arena<Type<'a>>,
+    pub types: Arena<Type<'alloc, 'a>>,
 
     /// Arena for all diagnostic filter rules parsed in this module, including those in functions.
     ///
@@ -83,8 +83,8 @@ impl Eq for Dependency<'_> {}
 
 /// A module-scope declaration.
 #[derive(Debug)]
-pub struct GlobalDecl<'a> {
-    pub kind: GlobalDeclKind<'a>,
+pub struct GlobalDecl<'alloc, 'a: 'alloc> {
+    pub kind: GlobalDeclKind<'alloc, 'a>,
 
     /// Names of all module-scope or predeclared objects this
     /// declaration uses.
@@ -92,56 +92,56 @@ pub struct GlobalDecl<'a> {
 }
 
 #[derive(Debug)]
-pub enum GlobalDeclKind<'a> {
-    Fn(Function<'a>),
-    Var(GlobalVariable<'a>),
-    Const(Const<'a>),
-    Override(Override<'a>),
-    Struct(Struct<'a>),
-    Type(TypeAlias<'a>),
-    ConstAssert(Handle<Expression<'a>>),
+pub enum GlobalDeclKind<'alloc, 'a: 'alloc> {
+    Fn(Function<'alloc, 'a>),
+    Var(GlobalVariable<'alloc, 'a>),
+    Const(Const<'alloc, 'a>),
+    Override(Override<'alloc, 'a>),
+    Struct(Struct<'alloc, 'a>),
+    Type(TypeAlias<'alloc, 'a>),
+    ConstAssert(Handle<Expression<'alloc, 'a>>),
 }
 
 #[derive(Debug)]
-pub struct FunctionArgument<'a> {
+pub struct FunctionArgument<'alloc, 'a: 'alloc> {
     pub name: Ident<'a>,
-    pub ty: Handle<Type<'a>>,
-    pub binding: Option<Binding<'a>>,
+    pub ty: Handle<Type<'alloc, 'a>>,
+    pub binding: Option<Binding<'alloc, 'a>>,
     pub handle: Handle<Local>,
 }
 
 #[derive(Debug)]
-pub struct FunctionResult<'a> {
-    pub ty: Handle<Type<'a>>,
-    pub binding: Option<Binding<'a>>,
+pub struct FunctionResult<'alloc, 'a: 'alloc> {
+    pub ty: Handle<Type<'alloc, 'a>>,
+    pub binding: Option<Binding<'alloc, 'a>>,
     pub must_use: bool,
 }
 
 #[derive(Debug)]
-pub struct EntryPoint<'a> {
+pub struct EntryPoint<'alloc, 'a: 'alloc> {
     pub stage: crate::ShaderStage,
     pub early_depth_test: Option<crate::EarlyDepthTest>,
-    pub workgroup_size: Option<[Option<Handle<Expression<'a>>>; 3]>,
+    pub workgroup_size: Option<[Option<Handle<Expression<'alloc, 'a>>>; 3]>,
 }
 
 #[cfg(doc)]
 use crate::front::wgsl::lower::{LocalExpressionContext, StatementContext};
 
 #[derive(Debug)]
-pub struct Function<'a> {
-    pub entry_point: Option<EntryPoint<'a>>,
+pub struct Function<'alloc, 'a: 'alloc> {
+    pub entry_point: Option<EntryPoint<'alloc, 'a>>,
     pub name: Ident<'a>,
-    pub arguments: Vec<FunctionArgument<'a>>,
-    pub result: Option<FunctionResult<'a>>,
-    pub body: Block<'a>,
+    pub arguments: Vec<'alloc, FunctionArgument<'alloc, 'a>>,
+    pub result: Option<FunctionResult<'alloc, 'a>>,
+    pub body: Block<'alloc, 'a>,
     pub diagnostic_filter_leaf: Option<Handle<DiagnosticFilterNode>>,
 }
 
 #[derive(Debug)]
-pub enum Binding<'a> {
+pub enum Binding<'alloc, 'a: 'alloc> {
     BuiltIn(crate::BuiltIn),
     Location {
-        location: Handle<Expression<'a>>,
+        location: Handle<Expression<'alloc, 'a>>,
         second_blend_source: bool,
         interpolation: Option<crate::Interpolation>,
         sampling: Option<crate::Sampling>,
@@ -149,54 +149,54 @@ pub enum Binding<'a> {
 }
 
 #[derive(Debug)]
-pub struct ResourceBinding<'a> {
-    pub group: Handle<Expression<'a>>,
-    pub binding: Handle<Expression<'a>>,
+pub struct ResourceBinding<'alloc, 'a: 'alloc> {
+    pub group: Handle<Expression<'alloc, 'a>>,
+    pub binding: Handle<Expression<'alloc, 'a>>,
 }
 
 #[derive(Debug)]
-pub struct GlobalVariable<'a> {
+pub struct GlobalVariable<'alloc, 'a: 'alloc> {
     pub name: Ident<'a>,
     pub space: crate::AddressSpace,
-    pub binding: Option<ResourceBinding<'a>>,
-    pub ty: Option<Handle<Type<'a>>>,
-    pub init: Option<Handle<Expression<'a>>>,
+    pub binding: Option<ResourceBinding<'alloc, 'a>>,
+    pub ty: Option<Handle<Type<'alloc, 'a>>>,
+    pub init: Option<Handle<Expression<'alloc, 'a>>>,
 }
 
 #[derive(Debug)]
-pub struct StructMember<'a> {
+pub struct StructMember<'alloc, 'a: 'alloc> {
     pub name: Ident<'a>,
-    pub ty: Handle<Type<'a>>,
-    pub binding: Option<Binding<'a>>,
-    pub align: Option<Handle<Expression<'a>>>,
-    pub size: Option<Handle<Expression<'a>>>,
+    pub ty: Handle<Type<'alloc, 'a>>,
+    pub binding: Option<Binding<'alloc, 'a>>,
+    pub align: Option<Handle<Expression<'alloc, 'a>>>,
+    pub size: Option<Handle<Expression<'alloc, 'a>>>,
 }
 
 #[derive(Debug)]
-pub struct Struct<'a> {
+pub struct Struct<'alloc, 'a: 'alloc> {
     pub name: Ident<'a>,
-    pub members: Vec<StructMember<'a>>,
+    pub members: Vec<'alloc, StructMember<'alloc, 'a>>,
 }
 
 #[derive(Debug)]
-pub struct TypeAlias<'a> {
+pub struct TypeAlias<'alloc, 'a: 'alloc> {
     pub name: Ident<'a>,
-    pub ty: Handle<Type<'a>>,
+    pub ty: Handle<Type<'alloc, 'a>>,
 }
 
 #[derive(Debug)]
-pub struct Const<'a> {
+pub struct Const<'alloc, 'a: 'alloc> {
     pub name: Ident<'a>,
-    pub ty: Option<Handle<Type<'a>>>,
-    pub init: Handle<Expression<'a>>,
+    pub ty: Option<Handle<Type<'alloc, 'a>>>,
+    pub init: Handle<Expression<'alloc, 'a>>,
 }
 
 #[derive(Debug)]
-pub struct Override<'a> {
+pub struct Override<'alloc, 'a: 'alloc> {
     pub name: Ident<'a>,
-    pub id: Option<Handle<Expression<'a>>>,
-    pub ty: Option<Handle<Type<'a>>>,
-    pub init: Option<Handle<Expression<'a>>>,
+    pub id: Option<Handle<Expression<'alloc, 'a>>>,
+    pub ty: Option<Handle<Type<'alloc, 'a>>>,
+    pub init: Option<Handle<Expression<'alloc, 'a>>>,
 }
 
 /// The size of an [`Array`] or [`BindingArray`].
@@ -204,34 +204,34 @@ pub struct Override<'a> {
 /// [`Array`]: Type::Array
 /// [`BindingArray`]: Type::BindingArray
 #[derive(Debug, Copy, Clone)]
-pub enum ArraySize<'a> {
+pub enum ArraySize<'alloc, 'a: 'alloc> {
     /// The length as a constant expression.
-    Constant(Handle<Expression<'a>>),
+    Constant(Handle<Expression<'alloc, 'a>>),
     Dynamic,
 }
 
 #[derive(Debug)]
-pub enum Type<'a> {
+pub enum Type<'alloc, 'a: 'alloc> {
     Scalar(Scalar),
     Vector {
         size: crate::VectorSize,
-        ty: Handle<Type<'a>>,
+        ty: Handle<Type<'alloc, 'a>>,
         ty_span: Span,
     },
     Matrix {
         columns: crate::VectorSize,
         rows: crate::VectorSize,
-        ty: Handle<Type<'a>>,
+        ty: Handle<Type<'alloc, 'a>>,
         ty_span: Span,
     },
     Atomic(Scalar),
     Pointer {
-        base: Handle<Type<'a>>,
+        base: Handle<Type<'alloc, 'a>>,
         space: crate::AddressSpace,
     },
     Array {
-        base: Handle<Type<'a>>,
-        size: ArraySize<'a>,
+        base: Handle<Type<'alloc, 'a>>,
+        size: ArraySize<'alloc, 'a>,
     },
     Image {
         dim: crate::ImageDimension,
@@ -246,8 +246,8 @@ pub enum Type<'a> {
     RayDesc,
     RayIntersection,
     BindingArray {
-        base: Handle<Type<'a>>,
-        size: ArraySize<'a>,
+        base: Handle<Type<'alloc, 'a>>,
+        size: ArraySize<'alloc, 'a>,
     },
 
     /// A user-defined type, like a struct or a type alias.
@@ -255,65 +255,65 @@ pub enum Type<'a> {
 }
 
 #[derive(Debug, Default)]
-pub struct Block<'a> {
-    pub stmts: Vec<Statement<'a>>,
+pub struct Block<'alloc, 'a: 'alloc> {
+    pub stmts: Vec<'alloc, Statement<'alloc, 'a>>,
 }
 
 #[derive(Debug)]
-pub struct Statement<'a> {
-    pub kind: StatementKind<'a>,
+pub struct Statement<'alloc, 'a: 'alloc> {
+    pub kind: StatementKind<'alloc, 'a>,
     pub span: Span,
 }
 
 #[derive(Debug)]
-pub enum StatementKind<'a> {
-    LocalDecl(LocalDecl<'a>),
-    Block(Block<'a>),
+pub enum StatementKind<'alloc, 'a: 'alloc> {
+    LocalDecl(LocalDecl<'alloc, 'a>),
+    Block(Block<'alloc, 'a>),
     If {
-        condition: Handle<Expression<'a>>,
-        accept: Block<'a>,
-        reject: Block<'a>,
+        condition: Handle<Expression<'alloc, 'a>>,
+        accept: Block<'alloc, 'a>,
+        reject: Block<'alloc, 'a>,
     },
     Switch {
-        selector: Handle<Expression<'a>>,
-        cases: Vec<SwitchCase<'a>>,
+        selector: Handle<Expression<'alloc, 'a>>,
+        cases: Vec<'alloc, SwitchCase<'alloc, 'a>>,
     },
     Loop {
-        body: Block<'a>,
-        continuing: Block<'a>,
-        break_if: Option<Handle<Expression<'a>>>,
+        body: Block<'alloc, 'a>,
+        continuing: Block<'alloc, 'a>,
+        break_if: Option<Handle<Expression<'alloc, 'a>>>,
     },
     Break,
     Continue,
     Return {
-        value: Option<Handle<Expression<'a>>>,
+        value: Option<Handle<Expression<'alloc, 'a>>>,
     },
     Kill,
     Call {
         function: Ident<'a>,
-        arguments: Vec<Handle<Expression<'a>>>,
+        arguments: Vec<'alloc, Handle<Expression<'alloc, 'a>>>,
     },
     Assign {
-        target: Handle<Expression<'a>>,
+        target: Handle<Expression<'alloc, 'a>>,
         op: Option<crate::BinaryOperator>,
-        value: Handle<Expression<'a>>,
+        value: Handle<Expression<'alloc, 'a>>,
     },
-    Increment(Handle<Expression<'a>>),
-    Decrement(Handle<Expression<'a>>),
-    Phony(Handle<Expression<'a>>),
-    ConstAssert(Handle<Expression<'a>>),
+    Increment(Handle<Expression<'alloc, 'a>>),
+    Decrement(Handle<Expression<'alloc, 'a>>),
+    Phony(Handle<Expression<'alloc, 'a>>),
+    ConstAssert(Handle<Expression<'alloc, 'a>>),
 }
 
 #[derive(Debug)]
-pub enum SwitchValue<'a> {
-    Expr(Handle<Expression<'a>>),
+pub enum SwitchValue<'alloc, 'a: 'alloc> {
+    Expr(Handle<Expression<'alloc, 'a>>),
     Default,
 }
 
 #[derive(Debug)]
-pub struct SwitchCase<'a> {
-    pub value: SwitchValue<'a>,
-    pub body: Block<'a>,
+pub struct SwitchCase<'alloc, 'a: 'alloc> {
+    pub value: SwitchValue<'alloc, 'a>,
+    pub body: Block<'alloc, 'a>,
     pub fall_through: bool,
 }
 
@@ -338,7 +338,7 @@ pub struct SwitchCase<'a> {
 /// [`type constructor expressions`]: https://gpuweb.github.io/gpuweb/wgsl/#type-constructor-expr
 /// [`Call`]: Expression::Call
 #[derive(Debug)]
-pub enum ConstructorType<'a> {
+pub enum ConstructorType<'alloc, 'a: 'alloc> {
     /// A scalar type or conversion: `f32(1)`.
     Scalar(Scalar),
 
@@ -350,7 +350,7 @@ pub enum ConstructorType<'a> {
     /// `vec3<f32>(1.0)`.
     Vector {
         size: crate::VectorSize,
-        ty: Handle<Type<'a>>,
+        ty: Handle<Type<'alloc, 'a>>,
         ty_span: Span,
     },
 
@@ -366,7 +366,7 @@ pub enum ConstructorType<'a> {
     Matrix {
         columns: crate::VectorSize,
         rows: crate::VectorSize,
-        ty: Handle<Type<'a>>,
+        ty: Handle<Type<'alloc, 'a>>,
         ty_span: Span,
     },
 
@@ -377,8 +377,8 @@ pub enum ConstructorType<'a> {
     /// An array whose component type and size are written out:
     /// `array<u32, 4>(3,4,5)`.
     Array {
-        base: Handle<Type<'a>>,
-        size: ArraySize<'a>,
+        base: Handle<Type<'alloc, 'a>>,
+        size: ArraySize<'alloc, 'a>,
     },
 
     /// Constructing a value of a known Naga IR type.
@@ -398,7 +398,7 @@ pub enum Literal {
 use crate::front::wgsl::lower::Lowerer;
 
 #[derive(Debug)]
-pub enum Expression<'a> {
+pub enum Expression<'alloc, 'a: 'alloc> {
     Literal(Literal),
     Ident(IdentExpr<'a>),
 
@@ -417,20 +417,20 @@ pub enum Expression<'a> {
     /// [type-defining keyword]: https://gpuweb.github.io/gpuweb/wgsl/#type-defining-keywords
     /// [`Call`]: Expression::Call
     Construct {
-        ty: ConstructorType<'a>,
+        ty: ConstructorType<'alloc, 'a>,
         ty_span: Span,
-        components: Vec<Handle<Expression<'a>>>,
+        components: Vec<'alloc, Handle<Expression<'alloc, 'a>>>,
     },
     Unary {
         op: crate::UnaryOperator,
-        expr: Handle<Expression<'a>>,
+        expr: Handle<Expression<'alloc, 'a>>,
     },
-    AddrOf(Handle<Expression<'a>>),
-    Deref(Handle<Expression<'a>>),
+    AddrOf(Handle<Expression<'alloc, 'a>>),
+    Deref(Handle<Expression<'alloc, 'a>>),
     Binary {
         op: crate::BinaryOperator,
-        left: Handle<Expression<'a>>,
-        right: Handle<Expression<'a>>,
+        left: Handle<Expression<'alloc, 'a>>,
+        right: Handle<Expression<'alloc, 'a>>,
     },
 
     /// A function call or type constructor expression.
@@ -449,52 +449,52 @@ pub enum Expression<'a> {
     /// [`Compose`]: crate::Expression::Compose
     Call {
         function: Ident<'a>,
-        arguments: Vec<Handle<Expression<'a>>>,
+        arguments: Vec<'alloc, Handle<Expression<'alloc, 'a>>>,
     },
     Index {
-        base: Handle<Expression<'a>>,
-        index: Handle<Expression<'a>>,
+        base: Handle<Expression<'alloc, 'a>>,
+        index: Handle<Expression<'alloc, 'a>>,
     },
     Member {
-        base: Handle<Expression<'a>>,
+        base: Handle<Expression<'alloc, 'a>>,
         field: Ident<'a>,
     },
     Bitcast {
-        expr: Handle<Expression<'a>>,
-        to: Handle<Type<'a>>,
+        expr: Handle<Expression<'alloc, 'a>>,
+        to: Handle<Type<'alloc, 'a>>,
         ty_span: Span,
     },
 }
 
 #[derive(Debug)]
-pub struct LocalVariable<'a> {
+pub struct LocalVariable<'alloc, 'a: 'alloc> {
     pub name: Ident<'a>,
-    pub ty: Option<Handle<Type<'a>>>,
-    pub init: Option<Handle<Expression<'a>>>,
+    pub ty: Option<Handle<Type<'alloc, 'a>>>,
+    pub init: Option<Handle<Expression<'alloc, 'a>>>,
     pub handle: Handle<Local>,
 }
 
 #[derive(Debug)]
-pub struct Let<'a> {
+pub struct Let<'alloc, 'a: 'alloc> {
     pub name: Ident<'a>,
-    pub ty: Option<Handle<Type<'a>>>,
-    pub init: Handle<Expression<'a>>,
+    pub ty: Option<Handle<Type<'alloc, 'a>>>,
+    pub init: Handle<Expression<'alloc, 'a>>,
     pub handle: Handle<Local>,
 }
 
 #[derive(Debug)]
-pub struct LocalConst<'a> {
+pub struct LocalConst<'alloc, 'a: 'alloc> {
     pub name: Ident<'a>,
-    pub ty: Option<Handle<Type<'a>>>,
-    pub init: Handle<Expression<'a>>,
+    pub ty: Option<Handle<Type<'alloc, 'a>>>,
+    pub init: Handle<Expression<'alloc, 'a>>,
     pub handle: Handle<Local>,
 }
 
 #[derive(Debug)]
-pub enum LocalDecl<'a> {
-    Var(LocalVariable<'a>),
-    Let(Let<'a>),
-    Const(LocalConst<'a>),
+pub enum LocalDecl<'alloc, 'a: 'alloc> {
+    Var(LocalVariable<'alloc, 'a>),
+    Let(Let<'alloc, 'a>),
+    Const(LocalConst<'alloc, 'a>),
 }
 
 #[derive(Debug)]

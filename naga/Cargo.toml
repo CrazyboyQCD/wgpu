@@ -25,7 +25,7 @@ path = "tests/root.rs"
 all-features = true
 
 [features]
-default = []
+default = ["arena-alloc"]
 dot-out = []
 glsl-in = ["dep:pp-rs"]
 glsl-out = []
@@ -72,6 +72,8 @@ hlsl-out = []
 hlsl-out-if-target-windows = []
 
 compact = []
+## Enables arena allocation
+arena-alloc = ["dep:allocator-api2", "dep:bumpalo", "dep:simdutf8"]
 
 [dependencies]
 arbitrary = { version = "1.4", features = ["derive"], optional = true }
@@ -98,6 +100,9 @@ petgraph = { version = "0.7", optional = true }
 pp-rs = { version = "0.2.1", optional = true }
 hexf-parse = { version = "0.2.1", optional = true }
 unicode-ident = { version = "1.0", optional = true }
+bumpalo = { version = "3.0.0", optional = true, features = ["allocator-api2", "collections"] }
+allocator-api2 = { version = "0.2", optional = true }
+simdutf8 = { version = "0.1.5", optional = true }
 
 [build-dependencies]
 cfg_aliases.workspace = true

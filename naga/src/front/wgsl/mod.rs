@@ -12,34 +12,36 @@ mod parse;
 mod tests;
 mod to_wgsl;
 
-use crate::front::wgsl::error::Error;
 use crate::front::wgsl::parse::Parser;
+use crate::{alloc::allocator, front::wgsl::error::Error};
 use thiserror::Error;
 
 pub use crate::front::wgsl::error::ParseError;
 use crate::front::wgsl::lower::Lowerer;
 use crate::Scalar;
 
+#[cfg(feature = "arena-alloc")]
+use crate::alloc::Allocator;
 pub use crate::front::wgsl::parse::directive::language_extension::{
     ImplementedLanguageExtension, LanguageExtension, UnimplementedLanguageExtension,
 };
 
-pub struct Frontend {
-    parser: Parser,
+pub struct Frontend<'alloc> {
+    parser: Parser<'alloc>,
 }
 
-impl Frontend {
-    pub const fn new() -> Self {
+impl<'alloc> Frontend<'alloc> {
+    pub fn new(allocator: &'alloc Allocator) -> Self {
         Self {
-            parser: Parser::new(),
+            parser: Parser::new(allocator),
         }
     }
 
-    pub fn parse(&mut self, source: &str) -> Result<crate::Module, ParseError> {
+    pub fn parse<'a: 'alloc>(&mut self, source: &'a str) -> Result<crate::Module, ParseError> {
         self.inner(source).map_err(|x| x.as_parse_error(source))
     }
 
-    fn inner<'a>(&mut self, source: &'a str) -> Result<crate::Module, Error<'a>> {
+    fn inner<'a: 'alloc>(&mut self, source: &'a str) -> Result<crate::Module, Error<'a>> {
         let tu = self.parser.parse(source)?;
         let index = index::Index::generate(&tu)?;
         let module = Lowerer::new(&index).lower(&tu)?;
@@ -60,7 +62,7 @@ impl Frontend {
 ///
 /// </div>
 pub fn parse_str(source: &str) -> Result<crate::Module, ParseError> {
-    Frontend::new().parse(source)
+    Frontend::new(&Allocator::default()).parse(source)
 }
 
 #[cfg(test)]
